@@ -1,20 +1,20 @@
-import mongoose, { Schema, Document } from "mongoose";
+import mongoose, { Schema, Document, Types } from "mongoose";
 
 interface IMessage extends Document {
-  conversation: mongoose.Types.ObjectId; // ID rozmowy
-  sender: mongoose.Types.ObjectId; // ID nadawcy
-  message: string; // Treść wiadomości
-  createdAt: Date; // Data wysłania wiadomości
+  conversation: Types.ObjectId;
+  sender: Types.ObjectId;
+  content: string;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
-const MessageSchema: Schema = new Schema(
+const MessageSchema = new Schema<IMessage>(
   {
     conversation: { type: Schema.Types.ObjectId, ref: "Conversation", required: true },
     sender: { type: Schema.Types.ObjectId, ref: "User", required: true },
-    message: { type: String, required: true },
+    content: { type: String, required: true }, // Pole na treść wiadomości
   },
-  { timestamps: true } // Automatyczne zarządzanie `createdAt` i `updatedAt`
+  { timestamps: true }
 );
 
-export default mongoose.models.Message ||
-  mongoose.model<IMessage>("Message", MessageSchema);
+export default mongoose.models.Message || mongoose.model<IMessage>("Message", MessageSchema);

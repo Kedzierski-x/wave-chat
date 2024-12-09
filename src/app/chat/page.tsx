@@ -7,9 +7,8 @@ import UserAvatarMenu from "@/components/UserAvatarMenu";
 import Notifications from "@/components/Notifications";
 import { useToast } from "@/hooks/use-toast";
 
-interface User {
-  id?: string;
-  _id?: string;
+export interface User {
+  id: string;
   name: string;
   email: string;
   avatar?: string;
@@ -18,9 +17,9 @@ interface User {
 
 interface Message {
   id: string;
-  sender: string;
+  sender: User;
   content: string;
-  timestamp: string;
+  createdAt: string;
 }
 
 const Chat = () => {
@@ -32,7 +31,6 @@ const Chat = () => {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const { toast } = useToast();
 
-  // Fetch current user and friends on mount
   useEffect(() => {
     const fetchCurrentUser = async () => {
       const token = localStorage.getItem("token");
@@ -60,7 +58,7 @@ const Chat = () => {
           return;
         }
 
-        const userData = await res.json();
+        const userData: User = await res.json();
         setCurrentUser(userData);
       } catch (error) {
         console.error("Error fetching user data:", error);
@@ -91,8 +89,13 @@ const Chat = () => {
           return;
         }
 
-        const data = await res.json();
-        setFriends(Array.isArray(data) ? data : []);
+        const data: User[] = await res.json();
+        setFriends(
+          data.map((friend: any) => ({
+            ...friend,
+            id: friend.id || friend._id,
+          }))
+        );
       } catch (error) {
         console.error("Error fetching friends:", error);
         toast({
@@ -105,15 +108,11 @@ const Chat = () => {
 
     fetchCurrentUser();
     fetchFriends();
-  }, []);
+  }, [toast]);
 
-  // Fetch messages when a friend is selected
   useEffect(() => {
     const fetchMessages = async () => {
-      if (!selectedFriend || !(selectedFriend.id || selectedFriend._id)) {
-        console.error("Selected friend is invalid.");
-        return;
-      }
+      if (!selectedFriend?.id) return;
 
       const token = localStorage.getItem("token");
       if (!token) {
@@ -126,21 +125,21 @@ const Chat = () => {
       }
 
       try {
-        const friendId = selectedFriend.id || selectedFriend._id; // Ensure correct friendId
-        const res = await fetch(`/api/messages?friendId=${friendId}`, {
+        const res = await fetch(`/api/messages?friendId=${selectedFriend.id}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
 
         if (!res.ok) {
+          const errorResponse = await res.json();
           toast({
             title: "Error fetching messages",
-            description: "Failed to load messages.",
+            description: errorResponse.error || "Failed to load messages.",
             variant: "destructive",
           });
           return;
         }
 
-        const data = await res.json();
+        const data: Message[] = await res.json();
         setMessages(data);
       } catch (error) {
         console.error("Error fetching messages:", error);
@@ -148,18 +147,22 @@ const Chat = () => {
     };
 
     fetchMessages();
-  }, [selectedFriend]);
+  }, [selectedFriend, toast]);
 
-  // Send message
   const sendMessage = async () => {
-    if (
-      !newMessage.trim() ||
-      !selectedFriend ||
-      !(selectedFriend.id || selectedFriend._id)
-    ) {
+    if (!newMessage.trim()) {
       toast({
         title: "Error",
-        description: "Friend or message content is missing.",
+        description: "Message content cannot be empty.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!selectedFriend?.id) {
+      toast({
+        title: "Error",
+        description: "Recipient is not selected.",
         variant: "destructive",
       });
       return;
@@ -176,7 +179,6 @@ const Chat = () => {
     }
 
     try {
-      const friendId = selectedFriend.id || selectedFriend._id; // Ensure correct friendId
       const res = await fetch("/api/messages", {
         method: "POST",
         headers: {
@@ -184,25 +186,31 @@ const Chat = () => {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          friendId,
+          friendId: selectedFriend.id,
           message: newMessage,
         }),
       });
 
       if (!res.ok) {
+        const errorResponse = await res.json();
         toast({
-          title: "Error",
-          description: "Failed to send message.",
+          title: "Error sending message",
+          description: errorResponse.error || "Failed to send message.",
           variant: "destructive",
         });
         return;
       }
 
-      const message = await res.json();
-      setMessages((prev) => [...prev, message]);
-      setNewMessage(""); // Clear input field
+      const savedMessage: Message = await res.json();
+      setMessages((prev) => [...prev, savedMessage]);
+      setNewMessage("");
     } catch (error) {
       console.error("Error sending message:", error);
+      toast({
+        title: "Error",
+        description: "Failed to send message. Please try again.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -213,65 +221,64 @@ const Chat = () => {
 
   return (
     <div className="flex h-screen flex-col">
-      {/* Top Bar */}
       <div className="flex items-center justify-between bg-gray-100 p-4 shadow-sm">
         {currentUser && (
           <UserAvatarMenu
-            user={currentUser!}
+            user={currentUser}
             onLogout={handleLogout}
-            onUpdateUser={(updatedData) =>
+            onUpdateUser={(updatedData: Partial<User>) =>
               setCurrentUser((prev) =>
-                prev
-                  ? { ...prev, ...updatedData }
-                  : { ...updatedData, name: "", email: "" }
+                prev ? { ...prev, ...updatedData } : null
               )
             }
           />
         )}
         <Notifications />
       </div>
-
-      {/* Main Content */}
       <div className="flex h-full">
-        {/* Sidebar */}
-        <div className="w-1/4 border-r">
+        <div className="w-1/4 border-r bg-white">
           <Sidebar
             friends={friends}
             onFindUsers={() => setIsDrawerOpen(true)}
             onSelectUser={(friend) => setSelectedFriend(friend)}
           />
         </div>
-
-        {/* Chat Area */}
-        <div className="flex-1 p-4 flex flex-col">
+        <div className="flex-1 p-4 flex flex-col bg-gray-50">
           {selectedFriend ? (
             <>
               <div className="flex-1 overflow-y-auto">
-                <h2 className="text-lg font-bold mb-4">
+                <h2 className="text-lg font-bold mb-4 text-blue-600">
                   Chat with {selectedFriend.name}
                 </h2>
-                {messages.map((message) => (
-                  <div key={message.id} className="mb-2">
-                    <strong>
-                      {message.sender === currentUser?.id
-                        ? "You"
-                        : selectedFriend.name}
-                      :
-                    </strong>{" "}
-                    {message.content}
-                  </div>
-                ))}
+                <div className="space-y-2">
+                  {messages.length > 0 ? (
+                    messages.map((message) => (
+                      <div
+                        key={message.id}
+                        className={`p-2 rounded ${
+                          message.sender.id === currentUser?.id
+                            ? "bg-blue-100 text-right"
+                            : "bg-gray-200"
+                        }`}
+                      >
+                        <strong>{message.sender.name}:</strong>{" "}
+                        {message.content}
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-gray-500">No messages found.</p>
+                  )}
+                </div>
               </div>
               <div className="mt-4 flex gap-2">
                 <input
                   className="flex-1 border p-2 rounded"
-                  type="text"
                   placeholder="Type a message..."
                   value={newMessage}
                   onChange={(e) => setNewMessage(e.target.value)}
                 />
                 <button
-                  className="bg-blue-500 text-white px-4 py-2 rounded"
+                  className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
                   onClick={sendMessage}
                 >
                   Send
@@ -279,12 +286,10 @@ const Chat = () => {
               </div>
             </>
           ) : (
-            <p>Select a friend to start chatting</p>
+            <p className="text-gray-500">Select a friend to start chatting</p>
           )}
         </div>
       </div>
-
-      {/* User Search Drawer */}
       <UserSearchDrawer
         isOpen={isDrawerOpen}
         onClose={() => setIsDrawerOpen(false)}

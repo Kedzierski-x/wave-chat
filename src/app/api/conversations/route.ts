@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import Conversation from "@/models/Conversation";
+import Conversation, { IConversation } from "@/models/Conversation";
 import connectToDatabase from "@/services/db";
 import { verifyToken } from "@/utils/auth";
 
@@ -7,10 +7,9 @@ export async function POST(request: Request) {
   try {
     await connectToDatabase();
 
-    const authHeader = request.headers.get("Authorization");
-    if (!authHeader) throw new Error("Authorization header is missing");
+    const token = request.headers.get("Authorization")?.split(" ")[1];
+    if (!token) throw new Error("Authorization header is missing");
 
-    const token = authHeader.split(" ")[1];
     const user = verifyToken(token);
     if (!user || !user.id) throw new Error("Invalid or expired token");
 
@@ -20,37 +19,33 @@ export async function POST(request: Request) {
 
     const existingConversation = await Conversation.findOne({
       participants: { $all: [user.id, participantId] },
-    }).populate("participants", "name email");
+    }).populate("participants", "name email avatar");
 
     if (existingConversation) {
       return NextResponse.json({
-        ...existingConversation.toObject(),
-        id: existingConversation._id,
+        id: existingConversation._id.toString(),
+        participants: existingConversation.participants,
       });
     }
 
-    const conversation = await Conversation.create({
+    const newConversation = await Conversation.create({
       participants: [user.id, participantId],
     });
 
-    const newConversation = await Conversation.findById(conversation._id).populate(
-      "participants",
-      "name email"
-    );
+    const populatedConversation = await Conversation.findById(newConversation._id)
+      .populate("participants", "name email avatar")
+      .lean<IConversation>(); // Specify the type explicitly
 
     return NextResponse.json(
       {
-        ...newConversation?.toObject(),
-        id: newConversation?._id,
+        id: populatedConversation?._id.toString(),
+        participants: populatedConversation?.participants,
       },
       { status: 201 }
     );
   } catch (error) {
-    const errorMessage =
-      error instanceof Error ? error.message : "An unknown error occurred";
-    console.error("Error creating conversation:", errorMessage);
-
-    return NextResponse.json({ error: errorMessage }, { status: 500 });
+    console.error("Error creating conversation:", error);
+    return NextResponse.json({ error: (error as Error).message || "Failed to create conversation." }, { status: 500 });
   }
 }
 
@@ -58,23 +53,26 @@ export async function GET(request: Request) {
   try {
     await connectToDatabase();
 
-    const authHeader = request.headers.get("Authorization");
-    if (!authHeader) throw new Error("Authorization header is missing");
+    const token = request.headers.get("Authorization")?.split(" ")[1];
+    if (!token) throw new Error("Authorization header is missing");
 
-    const token = authHeader.split(" ")[1];
     const user = verifyToken(token);
     if (!user || !user.id) throw new Error("Invalid or expired token");
 
     const conversations = await Conversation.find({
       participants: user.id,
-    }).populate("participants", "name email");
+    })
+      .populate("participants", "name email avatar")
+      .lean<IConversation[]>(); // Specify type for the array
 
-    return NextResponse.json(conversations || [], { status: 200 });
+    const normalizedConversations = conversations.map((conversation) => ({
+      id: conversation._id.toString(),
+      participants: conversation.participants,
+    }));
+
+    return NextResponse.json(normalizedConversations, { status: 200 });
   } catch (error) {
-    const errorMessage =
-      error instanceof Error ? error.message : "An unknown error occurred";
-    console.error("Error fetching conversations:", errorMessage);
-
-    return NextResponse.json({ error: errorMessage }, { status: 500 });
+    console.error("Error fetching conversations:", error);
+    return NextResponse.json({ error: (error as Error).message || "Failed to fetch conversations." }, { status: 500 });
   }
 }

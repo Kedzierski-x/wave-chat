@@ -1,17 +1,18 @@
-import mongoose, { Schema, Document } from "mongoose";
+import mongoose, { Schema, Document, Types } from "mongoose";
+import { IUser } from "./User";
 
-interface IConversation extends Document {
-  participants: mongoose.Types.ObjectId[]; // Lista uczestników rozmowy
-  createdAt: Date; // Data utworzenia rozmowy
+export interface IConversation extends Document {
+  _id: Types.ObjectId;
+  participants: (IUser | Types.ObjectId)[]; // Użytkownicy lub ObjectId
 }
 
-const ConversationSchema: Schema = new Schema(
+const ConversationSchema: Schema = new Schema<IConversation>(
   {
     participants: [
       { type: Schema.Types.ObjectId, ref: "User", required: true },
     ],
   },
-  { timestamps: true } // Automatyczne zarządzanie `createdAt` i `updatedAt`
+  { timestamps: true }
 );
 
 export default mongoose.models.Conversation ||

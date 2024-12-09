@@ -1,27 +1,17 @@
 import { NextResponse } from "next/server";
 import connectToDatabase from "@/services/db";
-import Message from "@/models/Message"; // Zakładam, że model wiadomości istnieje
-import { verifyToken } from "@/utils/auth";
+import Message from "@/models/Message";
 import Conversation from "@/models/Conversation";
+import { verifyToken } from "@/utils/auth";
 
 export async function GET(request: Request) {
   try {
     await connectToDatabase();
 
-    const url = new URL(request.url);
-    const friendId = url.searchParams.get("friendId");
-
-    if (!friendId) {
-      return NextResponse.json(
-        { error: "Conversation ID is required" },
-        { status: 400 }
-      );
-    }
-
     const token = request.headers.get("Authorization")?.split(" ")[1];
     if (!token) {
       return NextResponse.json(
-        { error: "Authorization header is missing" },
+        { error: "Authorization header is missing." },
         { status: 401 }
       );
     }
@@ -29,25 +19,56 @@ export async function GET(request: Request) {
     const user = verifyToken(token);
     if (!user) {
       return NextResponse.json(
-        { error: "Invalid or expired token" },
+        { error: "Invalid or expired token." },
         { status: 401 }
       );
     }
 
-    const messages = await Message.find({
-      participants: { $all: [user.id, friendId] },
-    }).sort({ createdAt: 1 });
+    const url = new URL(request.url);
+    const friendId = url.searchParams.get("friendId");
 
-    return NextResponse.json(messages);
+    if (!friendId) {
+      return NextResponse.json(
+        { error: "Friend ID is required." },
+        { status: 400 }
+      );
+    }
+
+    // Find conversation between the users
+    const conversation = await Conversation.findOne({
+      participants: { $all: [user.id, friendId] },
+    });
+
+    if (!conversation) {
+      return NextResponse.json([], { status: 200 });
+    }
+
+    // Fetch messages for the conversation
+    const messages = await Message.find({ conversation: conversation._id })
+      .sort({ createdAt: 1 })
+      .populate("sender", "name email avatar");
+
+    const normalizedMessages = messages.map((msg) => ({
+      id: msg._id.toString(),
+      content: msg.content,
+      createdAt: msg.createdAt,
+      sender: {
+        id: msg.sender._id.toString(),
+        name: msg.sender.name,
+        email: msg.sender.email,
+        avatar: msg.sender.avatar,
+      },
+    }));
+
+    return NextResponse.json(normalizedMessages, { status: 200 });
   } catch (error) {
     console.error("Error fetching messages:", error);
     return NextResponse.json(
-      { error: "Failed to fetch messages" },
+      { error: "Failed to fetch messages." },
       { status: 500 }
     );
   }
 }
-
 
 export async function POST(request: Request) {
   try {
@@ -56,29 +77,27 @@ export async function POST(request: Request) {
     const token = request.headers.get("Authorization")?.split(" ")[1];
     if (!token) {
       return NextResponse.json(
-        { error: "Authorization header is missing" },
+        { error: "Authorization header is missing." },
         { status: 401 }
       );
     }
 
     const user = verifyToken(token);
-    if (!user) {
+    if (!user?.id) {
       return NextResponse.json(
-        { error: "Invalid or expired token" },
+        { error: "Invalid or expired token." },
         { status: 401 }
       );
     }
 
     const { friendId, message } = await request.json();
-
     if (!friendId || !message) {
       return NextResponse.json(
-        { error: "Friend ID and message content are required" },
+        { error: "Friend ID and message content are required." },
         { status: 400 }
       );
     }
 
-    // Find or create a conversation between the users
     let conversation = await Conversation.findOne({
       participants: { $all: [user.id, friendId] },
     });
@@ -90,20 +109,33 @@ export async function POST(request: Request) {
       await conversation.save();
     }
 
-    // Save the message
     const newMessage = new Message({
       conversation: conversation._id,
       sender: user.id,
-      message, // Content of the message
+      content: message,
     });
 
     await newMessage.save();
+    const populatedMessage = await newMessage.populate("sender", "name email avatar");
 
-    return NextResponse.json(newMessage, { status: 201 });
+    return NextResponse.json(
+      {
+        id: populatedMessage._id.toString(),
+        content: populatedMessage.content,
+        createdAt: populatedMessage.createdAt,
+        sender: {
+          id: populatedMessage.sender._id.toString(),
+          name: populatedMessage.sender.name,
+          email: populatedMessage.sender.email,
+          avatar: populatedMessage.sender.avatar,
+        },
+      },
+      { status: 201 }
+    );
   } catch (error) {
     console.error("Error saving message:", error);
     return NextResponse.json(
-      { error: "Failed to save message" },
+      { error: "Failed to save message." },
       { status: 500 }
     );
   }

@@ -12,11 +12,14 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 interface User {
-  id?: string;
-  _id?: string;
+  id: string;
   name: string;
   email: string;
   avatar?: string;
+}
+
+interface ApiUser extends User {
+  _id?: string; // Include `_id` as optional for API response compatibility
 }
 
 interface UserSearchDrawerProps {
@@ -45,8 +48,15 @@ const UserSearchDrawer: React.FC<UserSearchDrawerProps> = ({
       });
 
       if (res.ok) {
-        const data: User[] = await res.json();
-        setSearchResults(data);
+        const data: ApiUser[] = await res.json();
+        setSearchResults(
+          data.map((user) => ({
+            id: user.id || user._id || "", // Normalize `id`
+            name: user.name,
+            email: user.email,
+            avatar: user.avatar,
+          }))
+        );
       } else {
         console.error("Failed to search users:", await res.text());
       }
@@ -66,11 +76,11 @@ const UserSearchDrawer: React.FC<UserSearchDrawerProps> = ({
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ userId: user.id || user._id }),
+        body: JSON.stringify({ userId: user.id }),
       });
 
       if (res.ok) {
-        onAddFriend(user); // Aktualizacja listy znajomych
+        onAddFriend(user); // Update friends in the parent component
       } else {
         console.error("Failed to add friend:", await res.text());
       }
@@ -98,7 +108,7 @@ const UserSearchDrawer: React.FC<UserSearchDrawerProps> = ({
             {searchResults.length > 0 ? (
               searchResults.map((user) => (
                 <div
-                  key={user.id || user._id}
+                  key={user.id}
                   className="p-2 border rounded cursor-pointer flex justify-between items-center gap-2"
                 >
                   <Avatar>
