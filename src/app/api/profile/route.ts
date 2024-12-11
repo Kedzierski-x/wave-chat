@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import connectToDatabase from "@/services/db";
-import User from "@/models/User";
+import User, { IUser } from "@/models/User";
 import { verifyToken } from "@/utils/auth";
 import cloudinary from "@/services/cloudinary";
 
@@ -18,14 +18,25 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Invalid token" }, { status: 401 });
     }
 
-    const currentUser = await User.findById(user.id).select(
-      "name email avatar description"
-    );
+    // Typujemy wynik zapytania
+    const currentUser: IUser | null = await User.findById(user.id)
+      .select("name email avatar description")
+      .lean();
+
     if (!currentUser) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    return NextResponse.json(currentUser, { status: 200 });
+    return NextResponse.json(
+      {
+        id: currentUser._id.toString(),
+        name: currentUser.name,
+        email: currentUser.email,
+        avatar: currentUser.avatar || null,
+        description: currentUser.description || null,
+      },
+      { status: 200 }
+    );
   } catch (error) {
     console.error("Error fetching user profile:", error);
     return NextResponse.json(

@@ -267,24 +267,59 @@ const Chat = () => {
               >
                 <div className="space-y-2">
                   {messages.length > 0 ? (
-                    messages.map((message) => (
-                      <div
-                        key={message.id}
-                        className={`p-2 rounded ${
-                          message.sender.id === currentUser?.id
-                            ? "bg-blue-100 text-right"
-                            : "bg-gray-200"
-                        }`}
-                      >
-                        <strong>{message.sender.name}:</strong>{" "}
-                        {message.content}
-                      </div>
-                    ))
+                    messages.map((message, index) => {
+                      const isCurrentUser =
+                        currentUser?.id === message.sender.id;
+
+                      // Debugowanie identyfikatorów użytkownika
+                      console.log("Message sender ID:", message.sender.id);
+                      console.log("Current user ID:", currentUser?.id);
+                      console.log("Is current user:", isCurrentUser);
+
+                      // Sprawdzamy, czy to ostatnia wiadomość od znajomego
+                      const isLastFromFriend =
+                        !isCurrentUser &&
+                        (index === messages.length - 1 ||
+                          messages[index + 1]?.sender.id !== message.sender.id);
+
+                      return (
+                        <div
+                          key={message.id}
+                          className={`flex items-end ${
+                            isCurrentUser ? "justify-end" : "justify-start"
+                          }`}
+                        >
+                          {/* Avatar znajomego tylko przy ostatniej wiadomości */}
+                          {!isCurrentUser && isLastFromFriend && (
+                            <img
+                              src={
+                                message.sender.avatar ||
+                                "/placeholder-avatar.svg"
+                              }
+                              alt={message.sender.name}
+                              className="w-8 h-8 rounded-full mr-2"
+                            />
+                          )}
+
+                          {/* Wiadomość */}
+                          <div
+                            className={`p-3 rounded-lg max-w-xs ${
+                              isCurrentUser
+                                ? "bg-blue-500 text-white text-right"
+                                : "bg-gray-200 text-black text-left"
+                            }`}
+                          >
+                            {message.content}
+                          </div>
+                        </div>
+                      );
+                    })
                   ) : (
                     <p className="text-gray-500">No messages found.</p>
                   )}
                 </div>
               </ScrollArea>
+
               {/* Message input */}
               <div className="sticky bottom-0 p-4 bg-white border-t flex gap-2">
                 <input
