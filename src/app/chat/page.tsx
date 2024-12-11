@@ -6,6 +6,7 @@ import UserSearchDrawer from "@/components/UserSearchDrawer";
 import UserAvatarMenu from "@/components/UserAvatarMenu";
 import Notifications from "@/components/Notifications";
 import { useToast } from "@/hooks/use-toast";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 export interface User {
   id: string;
@@ -220,7 +221,8 @@ const Chat = () => {
   };
 
   return (
-    <div className="flex h-screen flex-col">
+    <div className="h-screen flex flex-col overflow-hidden">
+      {/* Header */}
       <div className="flex items-center justify-between bg-gray-100 p-4 shadow-sm">
         {currentUser && (
           <UserAvatarMenu
@@ -235,7 +237,10 @@ const Chat = () => {
         )}
         <Notifications />
       </div>
-      <div className="flex h-full">
+
+      {/* Main content */}
+      <div className="flex flex-1">
+        {/* Sidebar */}
         <div className="w-1/4 border-r bg-white">
           <Sidebar
             friends={friends}
@@ -243,13 +248,23 @@ const Chat = () => {
             onSelectUser={(friend) => setSelectedFriend(friend)}
           />
         </div>
-        <div className="flex-1 p-4 flex flex-col bg-gray-50">
+
+        {/* Chat area */}
+        <div className="flex-1 flex flex-col bg-gray-50">
           {selectedFriend ? (
             <>
-              <div className="flex-1 overflow-y-auto">
-                <h2 className="text-lg font-bold mb-4 text-blue-600">
+              {/* Chat header */}
+              <div className="p-4 border-b">
+                <h2 className="text-lg font-bold text-blue-600">
                   Chat with {selectedFriend.name}
                 </h2>
+              </div>
+
+              {/* Scrollable messages area */}
+              <ScrollArea
+                className="flex-1 p-4"
+                style={{ maxHeight: "calc(100vh - 200px)" }}
+              >
                 <div className="space-y-2">
                   {messages.length > 0 ? (
                     messages.map((message) => (
@@ -269,8 +284,9 @@ const Chat = () => {
                     <p className="text-gray-500">No messages found.</p>
                   )}
                 </div>
-              </div>
-              <div className="mt-4 flex gap-2">
+              </ScrollArea>
+              {/* Message input */}
+              <div className="sticky bottom-0 p-4 bg-white border-t flex gap-2">
                 <input
                   className="flex-1 border p-2 rounded"
                   placeholder="Type a message..."
@@ -286,10 +302,14 @@ const Chat = () => {
               </div>
             </>
           ) : (
-            <p className="text-gray-500">Select a friend to start chatting</p>
+            <p className="text-gray-500 p-4">
+              Select a friend to start chatting
+            </p>
           )}
         </div>
       </div>
+
+      {/* User search drawer */}
       <UserSearchDrawer
         isOpen={isDrawerOpen}
         onClose={() => setIsDrawerOpen(false)}
