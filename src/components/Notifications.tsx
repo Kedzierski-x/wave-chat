@@ -1,16 +1,60 @@
-"use client";
-
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { BellIcon } from "@heroicons/react/24/outline";
+import { useToast } from "@/hooks/use-toast"; // Jeśli używasz hooka do powiadomień
 
 const Notifications = () => {
-  const [notifications, setNotifications] = useState<string[]>([
-    "New message from John",
-    "New message from Alice",
-  ]);
+  const [notifications, setNotifications] = useState<
+    { id: string; content: string; sender: { name: string; avatar?: string } }[]
+  >([]);
   const [isOpen, setIsOpen] = useState(false);
+  const { toast } = useToast();
 
   const toggleNotifications = () => setIsOpen((prev) => !prev);
+
+  useEffect(() => {
+    const fetchUnreadMessages = async () => {
+      try {
+        const token = localStorage.getItem("token");
+        if (!token) {
+          toast({
+            title: "Error",
+            description: "You need to log in to see notifications.",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        const res = await fetch("/api/unread-messages", {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (!res.ok) {
+          const errorData = await res.json();
+          toast({
+            title: "Error",
+            description: errorData?.error || "Failed to fetch notifications.",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        const data = await res.json();
+        console.log("Fetched unread messages:", data); // Debug log
+        setNotifications(data);
+      } catch (error) {
+        console.error("Error fetching notifications:", error);
+        toast({
+          title: "Error",
+          description: "Failed to load notifications. Try again later.",
+          variant: "destructive",
+        });
+      }
+    };
+
+    fetchUnreadMessages();
+  }, [toast]);
 
   return (
     <div className="relative">
@@ -28,12 +72,27 @@ const Notifications = () => {
       {isOpen && notifications.length > 0 && (
         <div className="absolute right-0 mt-2 w-64 rounded-md bg-white shadow-lg">
           <ul>
-            {notifications.map((notification, index) => (
+            {notifications.map((notification) => (
               <li
-                key={index}
-                className="border-b p-2 text-sm hover:bg-gray-100"
+                key={notification.id}
+                className="border-b p-2 text-sm flex items-center hover:bg-gray-100 cursor-pointer"
+                onClick={() => {
+                  // Obsługa nawigacji do czatu z użytkownikiem
+                  const friend = friends.find(
+                    (friend) => friend.id === notification.sender.id
+                  );
+                  if (friend) {
+                    setSelectedFriend(friend);
+                  }
+                  setIsOpen(false); // Zamknięcie powiadomień
+                }}
               >
-                {notification}
+                <img
+                  src={notification.sender.avatar || "/placeholder-avatar.svg"}
+                  alt={notification.sender.name}
+                  className="w-6 h-6 rounded-full mr-2"
+                />
+                <span>{notification.content}</span>
               </li>
             ))}
           </ul>

@@ -23,10 +23,10 @@ const Sidebar: React.FC<SidebarProps> = ({
   onSelectUser,
 }) => {
   return (
-    <div className="p-4">
-      <h2 className="text-lg font-bold mb-4">Friends</h2>
+    <div className="p-4 bg-gray-900 text-gray-100 h-full">
+      <h2 className="text-lg font-bold mb-4 text-gray-200">Friends</h2>
       <button
-        className="w-full p-2 mb-4 bg-blue-500 text-white rounded"
+        className="w-full p-2 mb-4 bg-gradient-to-r from-gray-700 to-gray-600 text-white rounded hover:from-gray-600 hover:to-gray-500 font-semibold"
         onClick={onFindUsers}
       >
         Find Users
@@ -38,8 +38,8 @@ const Sidebar: React.FC<SidebarProps> = ({
 
             return (
               <div
-                key={friend.id || friend._id} // Użyj `_id` jako fallback
-                className="p-2 border-b cursor-pointer flex items-center gap-3 hover:bg-gray-100 rounded"
+                key={friend.id}
+                className="p-2 border-b border-gray-700 cursor-pointer flex items-center gap-3 hover:bg-gray-800 rounded"
                 onClick={() => onSelectUser(friend)}
               >
                 <Avatar>
@@ -47,14 +47,18 @@ const Sidebar: React.FC<SidebarProps> = ({
                     src={friend.avatar || "/placeholder-avatar.svg"}
                     alt={friend.name}
                   />
-                  <AvatarFallback>{friend.name[0]}</AvatarFallback>
+                  <AvatarFallback className="bg-gray-700 text-white">
+                    {friend.name[0]}
+                  </AvatarFallback>
                 </Avatar>
-                <span className="text-sm font-medium">{friend.name}</span>
+                <span className="text-md font-medium text-gray-300">
+                  {friend.name}
+                </span>
               </div>
             );
           })
         ) : (
-          <p className="text-gray-500">No friends found.</p>
+          <p className="text-gray-400">No friends found.</p>
         )}
       </div>
     </div>

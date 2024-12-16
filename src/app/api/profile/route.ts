@@ -19,9 +19,10 @@ export async function GET(request: Request) {
     }
 
     // Typujemy wynik zapytania
-    const currentUser: IUser | null = await User.findById(user.id)
-      .select("name email avatar description")
-      .lean();
+const currentUser: IUser | null = await User.findById(user.id)
+  .select("name email avatar description")
+  .lean<IUser>();
+
 
     if (!currentUser) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });

@@ -2,11 +2,13 @@
   "name": "wave-chat",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "socket": "ts-node server.ts"
   },
   "dependencies": {
     "@heroicons/react": "^2.2.0",
@@ -21,6 +23,7 @@
     "cloudinary": "^2.5.1",
     "clsx": "^2.1.1",
     "dotenv": "^16.4.5",
+    "express": "^4.21.2",
     "jsonwebtoken": "^9.0.2",
     "lucide-react": "^0.465.0",
     "mongoose": "^8.8.3",
@@ -36,14 +39,17 @@
   },
   "devDependencies": {
     "@types/bcrypt": "^5.0.2",
+    "@types/express": "^5.0.0",
     "@types/jsonwebtoken": "^9.0.7",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
+    "@types/socket.io": "^3.0.1",
     "eslint": "^8",
     "eslint-config-next": "15.0.3",
     "postcss": "^8",
     "tailwindcss": "^3.4.1",
-    "typescript": "^5"
+    "ts-node": "^10.9.2",
+    "typescript": "^5.7.2"
   }
 }

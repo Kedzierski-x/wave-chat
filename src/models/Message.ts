@@ -6,6 +6,7 @@ interface IMessage extends Document {
   content: string;
   createdAt: Date;
   updatedAt: Date;
+  read: boolean;
 }
 
 const MessageSchema = new Schema<IMessage>(
@@ -13,6 +14,8 @@ const MessageSchema = new Schema<IMessage>(
     conversation: { type: Schema.Types.ObjectId, ref: "Conversation", required: true },
     sender: { type: Schema.Types.ObjectId, ref: "User", required: true },
     content: { type: String, required: true }, // Pole na treść wiadomości
+        read: { type: Boolean, default: false },
+
   },
   { timestamps: true }
 );
