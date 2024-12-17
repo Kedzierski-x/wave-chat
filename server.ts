@@ -1,64 +1,113 @@
-import express from "express";
+import dotenv from "dotenv";
+dotenv.config();
+import { WebSocket, WebSocketServer } from "ws";
 import http from "http";
-import { Server } from "socket.io";
-import connectToDatabase from "./src/services/db"; // Połączenie z bazą danych
 import Message from "./src/models/Message"; // Model wiadomości
-import User from "./src/models/User"; // Model użytkownika (jeśli istnieje)
+import Conversation from "./src/models/Conversation"; // Model konwersacji
+import connectToDatabase from "./src/services/db"; // Połączenie z bazą danych
+import User from "./src/models/User";
 
-const app = express();
-const server = http.createServer(app);
-const io = new Server(server, {
-  cors: {
-    origin: "http://localhost:3000",
-    methods: ["GET", "POST"],
-  },
-});
 
-// Połącz z bazą danych
+// Rozszerzenie typu WebSocket
+interface ExtendedWebSocket extends WebSocket {
+  userId?: string;
+}
+
+// Tworzenie serwera HTTP do WebSocket
+const server = http.createServer();
+const wss = new WebSocketServer({ server });
+
+// Połączenie z bazą danych MongoDB
 connectToDatabase();
 
-io.on("connection", (socket) => {
-  console.log("User connected:", socket.id);
+interface WebSocketMessage {
+  type: string;
+  userId?: string;
+  recipientId?: string;
+  content?: string;
+}
 
-  socket.on("join", (userId) => {
-    console.log(`User ${userId} joined their personal room.`);
-    socket.join(userId); // Użytkownik dołącza do swojego pokoju
-  });
+// Obsługa połączeń WebSocket
+wss.on("connection", (ws: ExtendedWebSocket) => {
+  console.log("Client connected");
 
-  socket.on("message", async (data) => {
-    try {
-      const { sender, recipientId, content } = data;
+  ws.on("message", async (data: string) => {
+    const message: WebSocketMessage = JSON.parse(data);
 
-      // Utwórz nową wiadomość i zapisz ją w bazie danych
-      const message = await Message.create({
-        sender: sender.id,
-        recipient: recipientId,
-        content,
-        createdAt: new Date(),
-        read: false,
-      });
+    // Przypisz userId do WebSocket przy połączeniu
+    if (message.type === "join" && message.userId) {
+      console.log(`User ${message.userId} joined`);
+      ws.userId = message.userId;
+    }
 
-      // Wyślij wiadomość do odbiorcy (jeśli jest połączony)
-      io.to(recipientId).emit("message", {
-        id: message._id,
-        sender,
-        content,
-        createdAt: message.createdAt,
-        read: message.read,
-      });
+    if (message.type === "message") {
+      try {
+        const { userId, recipientId, content } = message;
 
-      console.log("Message saved and sent:", message);
-    } catch (error) {
-      console.error("Error saving message:", error);
+        if (!userId || !recipientId || !content) return;
+
+        // Znajdź lub utwórz konwersację
+        let conversation = await Conversation.findOne({
+          participants: { $all: [userId, recipientId] },
+        });
+
+        if (!conversation) {
+          conversation = await Conversation.create({
+            participants: [userId, recipientId],
+          });
+        }
+
+        // Zapisz wiadomość
+        const newMessage = new Message({
+          conversation: conversation._id,
+          sender: userId,
+          content,
+          read: false,
+        });
+        await newMessage.save();
+
+        // Pobierz dane nadawcy
+        const senderUser = await User.findById(userId).select(
+          "id name email avatar"
+        );
+
+        const messageData = {
+          id: newMessage._id,
+          sender: {
+            id: senderUser._id,
+            name: senderUser.name,
+            email: senderUser.email,
+            avatar: senderUser.avatar,
+          },
+          content: newMessage.content,
+          createdAt: newMessage.createdAt,
+        };
+
+        // Wyślij wiadomość do odbiorcy i nadawcy
+        wss.clients.forEach((client) => {
+          const extendedClient = client as ExtendedWebSocket;
+          if (
+            (extendedClient.userId === recipientId ||
+              extendedClient.userId === userId) &&
+            client.readyState === WebSocket.OPEN
+          ) {
+            client.send(JSON.stringify(messageData));
+          }
+        });
+
+        console.log("Message sent and saved to DB");
+      } catch (error) {
+        console.error("Error saving message:", error);
+      }
     }
   });
 
-  socket.on("disconnect", () => {
-    console.log("User disconnected:", socket.id);
+  ws.on("close", () => {
+    console.log("Client disconnected");
   });
 });
-
+// Uruchomienie serwera
 const PORT = 4000;
 server.listen(PORT, () => {
-  console.log(`Socket.IO server is running on port ${PORT}`);
+  console.log(`WebSocket server running on ws://localhost:${PORT}`);
 });

@@ -75,17 +75,7 @@ const Notifications = () => {
             {notifications.map((notification) => (
               <li
                 key={notification.id}
-                className="border-b p-2 text-sm flex items-center hover:bg-gray-100 cursor-pointer"
-                onClick={() => {
-                  // Obsługa nawigacji do czatu z użytkownikiem
-                  const friend = friends.find(
-                    (friend) => friend.id === notification.sender.id
-                  );
-                  if (friend) {
-                    setSelectedFriend(friend);
-                  }
-                  setIsOpen(false); // Zamknięcie powiadomień
-                }}
+                className="border-b p-2 text-sm flex items-center hover:bg-gray-100"
               >
                 <img
                   src={notification.sender.avatar || "/placeholder-avatar.svg"}

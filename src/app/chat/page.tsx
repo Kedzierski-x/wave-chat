@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { io } from "socket.io-client";
 import Sidebar from "@/components/Sidebar";
 import UserSearchDrawer from "@/components/UserSearchDrawer";
@@ -8,8 +8,6 @@ import UserAvatarMenu from "@/components/UserAvatarMenu";
 import Notifications from "@/components/Notifications";
 import { useToast } from "@/hooks/use-toast";
 import { ScrollArea } from "@/components/ui/scroll-area";
-
-const socket = io("http://localhost:4000"); // Adres serwera Socket.IO
 
 export interface User {
   id: string;
@@ -37,35 +35,52 @@ const Chat = () => {
   const { toast } = useToast();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const ws = useRef<WebSocket | null>(null);
 
+  // Połączenie z WebSocket
   useEffect(() => {
-    // Connect to Socket.IO and join the user's room
-    socket.on("connect", () => {
-      console.log("Connected to Socket.IO:", socket.id);
+    ws.current = new WebSocket("ws://localhost:4000");
+
+    ws.current.onopen = () => {
+      console.log("Connected to WebSocket");
 
       if (currentUser) {
-        socket.emit("join", currentUser.id);
+        ws.current?.send(
+          JSON.stringify({ type: "join", userId: currentUser.id })
+        );
       }
-    });
-
-    // Listen for real-time incoming messages
-    socket.on("message", (message: Message) => {
-      if (selectedFriend?.id === message.sender.id) {
-        setMessages((prev) => [...prev, message]);
-      } else {
-        toast({
-          title: `New message from ${message.sender.name}`,
-          description: message.content,
-        });
-      }
-    });
-
-    // Cleanup Socket.IO listeners on component unmount
-    return () => {
-      socket.off("connect");
-      socket.off("message");
     };
-  }, [currentUser, selectedFriend, toast]);
+
+    ws.current.onmessage = (event) => {
+      const message: Message = JSON.parse(event.data);
+      console.log("Otrzymano wiadomość:", message);
+
+      setMessages((prev) => {
+        const isDuplicate = prev.some((msg) => msg.id === message.id);
+
+        if (!isDuplicate) {
+          // Dodaj wiadomość tylko jeśli nie istnieje
+          return [...prev, message];
+        }
+
+        return prev; // Jeśli duplikat, nie rób nic
+      });
+    };
+
+    ws.current.onclose = () => {
+      console.log("Disconnected from WebSocket");
+    };
+
+    ws.current.onerror = (error) => {
+      console.error("WebSocket Error:", error);
+    };
+
+    return () => {
+      if (ws.current?.readyState === WebSocket.OPEN) {
+        ws.current?.close();
+      }
+    };
+  }, [selectedFriend, toast]);
 
   useEffect(() => {
     const fetchCurrentUser = async () => {
@@ -96,7 +111,18 @@ const Chat = () => {
 
         const userData: User = await res.json();
         setCurrentUser(userData);
-        socket.emit("join", userData.id);
+
+        if (ws.current?.readyState === WebSocket.OPEN) {
+          ws.current?.send(
+            JSON.stringify({ type: "join", userId: userData.id })
+          );
+        } else {
+          ws.current?.addEventListener("open", () => {
+            ws.current?.send(
+              JSON.stringify({ type: "join", userId: userData.id })
+            );
+          });
+        }
       } catch (error) {
         console.error("Error fetching user data:", error);
         toast({
@@ -186,69 +212,20 @@ const Chat = () => {
     fetchMessages();
   }, [selectedFriend, toast]);
 
-  const sendMessage = async () => {
-    if (!newMessage.trim()) {
-      toast({
-        title: "Error",
-        description: "Message content cannot be empty.",
-        variant: "destructive",
-      });
-      return;
-    }
+  const sendMessage = () => {
+    if (!newMessage.trim() || !selectedFriend) return;
 
-    if (!selectedFriend?.id) {
-      toast({
-        title: "Error",
-        description: "Recipient is not selected.",
-        variant: "destructive",
-      });
-      return;
-    }
+    const message = {
+      type: "message",
+      userId: currentUser?.id,
+      recipientId: selectedFriend.id,
+      content: newMessage,
+    };
 
-    const token = localStorage.getItem("token");
-    if (!token) {
-      toast({
-        title: "Error",
-        description: "Authentication token is missing.",
-        variant: "destructive",
-      });
-      return;
-    }
+    // send to server
+    ws.current?.send(JSON.stringify(message));
 
-    try {
-      const res = await fetch("/api/messages", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          friendId: selectedFriend.id,
-          message: newMessage,
-        }),
-      });
-
-      if (!res.ok) {
-        const errorResponse = await res.json();
-        toast({
-          title: "Error sending message",
-          description: errorResponse.error || "Failed to send message.",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      const savedMessage: Message = await res.json();
-      setMessages((prev) => [...prev, savedMessage]);
-      setNewMessage("");
-    } catch (error) {
-      console.error("Error sending message:", error);
-      toast({
-        title: "Error",
-        description: "Failed to send message. Please try again.",
-        variant: "destructive",
-      });
-    }
+    setNewMessage("");
   };
 
   const handleLogout = () => {
@@ -256,7 +233,7 @@ const Chat = () => {
     window.location.href = "/login";
   };
 
-  // Dodaj logikę, która oznacza wiadomości jako przeczytane:
+  // nie dziala jeszcze
   const markMessagesAsRead = async (messageIds: string[]) => {
     try {
       const token = localStorage.getItem("token");
@@ -285,20 +262,20 @@ const Chat = () => {
       console.error("Error marking messages as read:", error);
     }
   };
-  // Przykład wywołania tej funkcji w momencie otwierania czatu:
-  useEffect(() => {
-    if (selectedFriend && messages.length > 0) {
-      const unreadMessageIds = messages
-        .filter(
-          (msg) => !msg.read && msg.sender.id !== currentUser?.id // Tylko nieprzeczytane
-        )
-        .map((msg) => msg.id);
+  // wiadomosci przeczytane
+  // useEffect(() => {
+  //   if (selectedFriend && messages.length > 0) {
+  //     const unreadMessageIds = messages
+  //       .filter(
+  //         (msg) => !msg.read && msg.sender.id !== currentUser?.id // Tylko nieprzeczytane
+  //       )
+  //       .map((msg) => msg.id);
 
-      if (unreadMessageIds.length > 0) {
-        markMessagesAsRead(unreadMessageIds);
-      }
-    }
-  }, [selectedFriend, messages, currentUser]);
+  //     if (unreadMessageIds.length > 0) {
+  //       markMessagesAsRead(unreadMessageIds);
+  //     }
+  //   }
+  // }, [selectedFriend, messages, currentUser]);
 
   return (
     <div className="h-screen flex flex-col bg-gray-900 text-gray-200 overflow-hidden">
@@ -325,11 +302,7 @@ const Chat = () => {
             }
           />
         )}
-        <img
-          src="/logo.svg" // Path to your logo file
-          alt="Logo"
-          className="w-10"
-        />
+        <img src="/logo.svg" className="w-10" />
       </div>
 
       {/* Main content */}
@@ -347,7 +320,7 @@ const Chat = () => {
             onFindUsers={() => setIsDrawerOpen(true)}
             onSelectUser={(friend) => {
               setSelectedFriend(friend);
-              setIsSidebarOpen(false); // Close Sidebar on small screens after selecting a user
+              setIsSidebarOpen(false);
             }}
           />
         </div>
@@ -374,12 +347,6 @@ const Chat = () => {
                       const isCurrentUser =
                         currentUser?.id === message.sender.id;
 
-                      // Debugowanie identyfikatorów użytkownika
-                      console.log("Message sender ID:", message.sender.id);
-                      console.log("Current user ID:", currentUser?.id);
-                      console.log("Is current user:", isCurrentUser);
-
-                      // Sprawdzamy, czy to ostatnia wiadomość od znajomego
                       const isLastFromFriend =
                         !isCurrentUser &&
                         (index === messages.length - 1 ||
@@ -453,7 +420,7 @@ const Chat = () => {
                 Wybierz znajomego, aby rozpocząć czat
               </p>
               <img
-                src="/logo.svg" // Path to your logo file
+                src="/logo.svg"
                 alt="Logo"
                 className="w-96 h-96 opacity-30"
               />
