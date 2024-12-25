@@ -1,92 +1,113 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { BellIcon } from "@heroicons/react/24/outline";
-import { useToast } from "@/hooks/use-toast"; // Jeśli używasz hooka do powiadomień
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Avatar, AvatarImage } from "@/components/ui/avatar";
 
-const Notifications = () => {
-  const [notifications, setNotifications] = useState<
-    { id: string; content: string; sender: { name: string; avatar?: string } }[]
-  >([]);
+interface CustomNotification {
+  id: string;
+  content: string;
+  sender: { name: string; avatar?: string };
+}
+
+const Notifications = ({
+  newNotification,
+  onNotificationClear,
+}: {
+  newNotification: CustomNotification | null;
+  onNotificationClear: () => void; // Funkcja do czyszczenia powiadomień
+}) => {
+  const [notifications, setNotifications] = useState<CustomNotification[]>([]);
   const [isOpen, setIsOpen] = useState(false);
-  const { toast } = useToast();
+  const notificationRef = useRef<HTMLDivElement | null>(null);
 
-  const toggleNotifications = () => setIsOpen((prev) => !prev);
+  const toggleNotifications = () => {
+    if (isOpen) {
+      setNotifications([]); // Wyczyść powiadomienia po zamknięciu
+      onNotificationClear(); // Wywołaj przekazaną funkcję do czyszczenia
+    }
+    setIsOpen((prev) => !prev);
+  };
 
   useEffect(() => {
-    const fetchUnreadMessages = async () => {
-      try {
-        const token = localStorage.getItem("token");
-        if (!token) {
-          toast({
-            title: "Error",
-            description: "You need to log in to see notifications.",
-            variant: "destructive",
-          });
-          return;
+    if (newNotification) {
+      const uniqueId = `${newNotification.id}-${Date.now()}`;
+      const notificationWithUniqueId = { ...newNotification, uniqueId };
+
+      setNotifications((prev) =>
+        [notificationWithUniqueId, ...prev].slice(0, 10)
+      );
+    }
+  }, [newNotification]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        notificationRef.current &&
+        !notificationRef.current.contains(event.target as Node)
+      ) {
+        if (isOpen) {
+          setNotifications([]); // Wyczyść powiadomienia po zamknięciu
+          onNotificationClear(); // Wywołaj przekazaną funkcję do czyszczenia
         }
-
-        const res = await fetch("/api/unread-messages", {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-
-        if (!res.ok) {
-          const errorData = await res.json();
-          toast({
-            title: "Error",
-            description: errorData?.error || "Failed to fetch notifications.",
-            variant: "destructive",
-          });
-          return;
-        }
-
-        const data = await res.json();
-        console.log("Fetched unread messages:", data); // Debug log
-        setNotifications(data);
-      } catch (error) {
-        console.error("Error fetching notifications:", error);
-        toast({
-          title: "Error",
-          description: "Failed to load notifications. Try again later.",
-          variant: "destructive",
-        });
+        setIsOpen(false);
       }
     };
 
-    fetchUnreadMessages();
-  }, [toast]);
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isOpen, onNotificationClear]);
 
   return (
-    <div className="relative">
+    <div className="relative" ref={notificationRef}>
       <button
         className="relative focus:outline-none"
         onClick={toggleNotifications}
       >
         <BellIcon className="h-6 w-6 text-gray-500" />
         {notifications.length > 0 && (
-          <span className="absolute right-0 top-0 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-xs text-white">
+          <span className="absolute -right-2 -top-2 h-5 w-5 flex items-center justify-center rounded-full bg-red-500 text-white text-xs">
             {notifications.length}
           </span>
         )}
       </button>
       {isOpen && notifications.length > 0 && (
-        <div className="absolute right-0 mt-2 w-64 rounded-md bg-white shadow-lg">
-          <ul>
-            {notifications.map((notification) => (
-              <li
-                key={notification.id}
-                className="border-b p-2 text-sm flex items-center hover:bg-gray-100"
-              >
-                <img
-                  src={notification.sender.avatar || "/placeholder-avatar.svg"}
-                  alt={notification.sender.name}
-                  className="w-6 h-6 rounded-full mr-2"
-                />
-                <span>{notification.content}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
+        <Card className="absolute right-0 mt-2 w-80 shadow-lg z-10">
+          <CardHeader>
+            <CardTitle>Powiadomienia</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul className="space-y-2">
+              {notifications.map((notification, index) => (
+                <li
+                  key={notification.id || `${notification.id}-${index}`}
+                  className="flex items-center gap-3 p-2 hover:bg-gray-100 rounded-md cursor-pointer"
+                  onClick={() => {
+                    onNotificationClear(); // Przekazujemy, że powiadomienie zostało obsłużone
+                  }}
+                >
+                  <Avatar className="h-8 w-8">
+                    <AvatarImage
+                      src={
+                        notification.sender.avatar || "/placeholder-avatar.svg"
+                      }
+                      alt={notification.sender.name}
+                    />
+                  </Avatar>
+                  <div className="flex flex-col">
+                    <span className="font-medium">
+                      {notification.sender.name}
+                    </span>
+                    <span className="text-sm text-gray-600 truncate">
+                      {notification.content}
+                    </span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
       )}
     </div>
   );

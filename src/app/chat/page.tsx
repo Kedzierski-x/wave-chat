@@ -24,6 +24,11 @@ export interface Message {
   createdAt: string;
   read: boolean;
 }
+interface CustomNotification {
+  id: string;
+  content: string;
+  sender: { name: string; avatar?: string };
+}
 
 const Chat = () => {
   const [friends, setFriends] = useState<User[]>([]);
@@ -34,8 +39,18 @@ const Chat = () => {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const { toast } = useToast();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [newNotification, setNewNotification] =
+    useState<CustomNotification | null>(null);
+
   const ws = useRef<WebSocket | null>(null);
+
+  const lastMessageRef = useRef<HTMLDivElement | null>(null);
+
+  const scrollToBottom = () => {
+    if (lastMessageRef.current) {
+      lastMessageRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  };
 
   // Połączenie z WebSocket
   useEffect(() => {
@@ -55,16 +70,31 @@ const Chat = () => {
       const message: Message = JSON.parse(event.data);
       console.log("Otrzymano wiadomość:", message);
 
-      setMessages((prev) => {
-        const isDuplicate = prev.some((msg) => msg.id === message.id);
+      // Dodaj wiadomość do listy wiadomości
+      if (
+        message.sender.id === currentUser?.id ||
+        message.sender.id === selectedFriend?.id
+      ) {
+        setMessages((prev) => {
+          const isDuplicate = prev.some((msg) => msg.id === message.id);
 
-        if (!isDuplicate) {
-          // Dodaj wiadomość tylko jeśli nie istnieje
-          return [...prev, message];
-        }
+          if (!isDuplicate) {
+            return [...prev, message];
+          }
 
-        return prev; // Jeśli duplikat, nie rób nic
-      });
+          return prev;
+        });
+      } else {
+        // Jeśli wiadomość pochodzi od innego użytkownika, dodaj powiadomienie
+        setNewNotification({
+          id: message.id,
+          content: message.content,
+          sender: {
+            name: message.sender.name,
+            avatar: message.sender.avatar || "/placeholder-avatar.svg",
+          },
+        } as CustomNotification);
+      }
     };
 
     ws.current.onclose = () => {
@@ -212,6 +242,10 @@ const Chat = () => {
     fetchMessages();
   }, [selectedFriend, toast]);
 
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
   const sendMessage = () => {
     if (!newMessage.trim() || !selectedFriend) return;
 
@@ -262,20 +296,6 @@ const Chat = () => {
       console.error("Error marking messages as read:", error);
     }
   };
-  // wiadomosci przeczytane
-  // useEffect(() => {
-  //   if (selectedFriend && messages.length > 0) {
-  //     const unreadMessageIds = messages
-  //       .filter(
-  //         (msg) => !msg.read && msg.sender.id !== currentUser?.id // Tylko nieprzeczytane
-  //       )
-  //       .map((msg) => msg.id);
-
-  //     if (unreadMessageIds.length > 0) {
-  //       markMessagesAsRead(unreadMessageIds);
-  //     }
-  //   }
-  // }, [selectedFriend, messages, currentUser]);
 
   return (
     <div className="h-screen flex flex-col bg-gray-900 text-gray-200 overflow-hidden">
@@ -290,7 +310,6 @@ const Chat = () => {
             ☰
           </button>
         </div>
-
         {currentUser && (
           <UserAvatarMenu
             user={currentUser}
@@ -302,7 +321,10 @@ const Chat = () => {
             }
           />
         )}
-        <img src="/logo.svg" className="w-10" />
+        <Notifications
+          newNotification={newNotification}
+          onNotificationClear={() => setNewNotification(null)} // Funkcja czyszczenia
+        />{" "}
       </div>
 
       {/* Main content */}
@@ -355,6 +377,11 @@ const Chat = () => {
                       return (
                         <div
                           key={message.id}
+                          ref={
+                            index === messages.length - 1
+                              ? lastMessageRef
+                              : null
+                          }
                           className={`flex items-end ${
                             isCurrentUser ? "justify-end" : "justify-start"
                           }`}
@@ -405,6 +432,12 @@ const Chat = () => {
                   placeholder="Type a message..."
                   value={newMessage}
                   onChange={(e) => setNewMessage(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault(); // Zapobiega domyślnemu zachowaniu
+                      sendMessage();
+                    }
+                  }}
                 />
                 <button
                   className="bg-purple-700 text-white px-4 py-2 rounded hover:opacity-90"
